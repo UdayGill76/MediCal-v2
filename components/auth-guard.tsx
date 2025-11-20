@@ -1,69 +1,31 @@
 "use client"
 
 import type React from "react"
-
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-
-interface AuthData {
-  userId: string
-  role: "doctor"
-  timestamp: number
-}
+import { signOut, useSession } from "next-auth/react"
 
 interface AuthGuardProps {
   children: React.ReactNode
   requiredRole?: "doctor"
 }
 
-export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+export function AuthGuard({ children, requiredRole = "doctor" }: AuthGuardProps) {
   const router = useRouter()
+  const { data: session, status } = useSession()
 
   useEffect(() => {
-    const checkAuth = () => {
-      try {
-        const authData = localStorage.getItem("medicalAuth")
-        if (!authData) {
-          router.push("/login")
-          return
-        }
-
-        const auth: AuthData = JSON.parse(authData)
-
-        // Check if token is expired (24 hours)
-        const isExpired = Date.now() - auth.timestamp > 24 * 60 * 60 * 1000
-        if (isExpired) {
-          localStorage.removeItem("medicalAuth")
-          router.push("/login")
-          return
-        }
-
-        // Doctor-only access enforcement
-        if (auth.role !== "doctor") {
-          localStorage.removeItem("medicalAuth")
-          router.push("/login")
-          return
-        }
-        if (requiredRole && auth.role !== requiredRole) {
-          router.push("/doctor")
-          return
-        }
-
-        setIsAuthenticated(true)
-      } catch (error) {
-        console.error("Auth check failed:", error)
-        router.push("/login")
-      } finally {
-        setIsLoading(false)
-      }
+    if (status === "unauthenticated") {
+      router.replace("/login")
+      return
     }
 
-    checkAuth()
-  }, [router, requiredRole])
+    if (status === "authenticated" && requiredRole && session?.user.role !== requiredRole) {
+      router.replace("/login")
+    }
+  }, [status, session?.user.role, router, requiredRole])
 
-  if (isLoading) {
+  if (status === "loading") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-teal-50 to-rose-50 flex items-center justify-center">
         <div className="text-center">
@@ -74,7 +36,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     )
   }
 
-  if (!isAuthenticated) {
+  if (status !== "authenticated" || (requiredRole && session?.user.role !== requiredRole)) {
     return null
   }
 
@@ -82,19 +44,22 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
 }
 
 export function useAuth() {
-  const [authData, setAuthData] = useState<AuthData | null>(null)
-
-  useEffect(() => {
-    const auth = localStorage.getItem("medicalAuth")
-    if (auth) {
-      setAuthData(JSON.parse(auth))
-    }
-  }, [])
+  const { data: session } = useSession()
 
   const logout = () => {
-    localStorage.removeItem("medicalAuth")
-    window.location.href = "/login"
+    signOut({ callbackUrl: "/login" })
   }
 
-  return { authData, logout }
+  if (!session?.user) {
+    return { authData: null, logout }
+  }
+
+  return {
+    authData: {
+      userId: session.user.id,
+      role: session.user.role ?? "doctor",
+      name: session.user.name ?? session.user.id,
+    },
+    logout,
+  }
 }

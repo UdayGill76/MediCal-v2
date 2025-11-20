@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Stethoscope, ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { signIn } from "next-auth/react"
 
 export default function LoginPage() {
   const [userId, setUserId] = useState("")
@@ -35,26 +36,25 @@ export default function LoginPage() {
       return
     }
 
-    // Mock authentication - in real app, validate against database
     if (password.length < 4) {
       setError("Password must be at least 4 characters.")
       setLoading(false)
       return
     }
 
-    // Store auth data in localStorage (in production, use secure tokens)
-    localStorage.setItem(
-      "medicalAuth",
-      JSON.stringify({
-        userId: idUpper,
-        role: "doctor",
-        timestamp: Date.now(),
-      }),
-    )
+    const result = await signIn("credentials", {
+      redirect: false,
+      id: idUpper,
+      password,
+    })
 
-    // Redirect to doctor portal only
+    if (result?.error) {
+      setError("Invalid Doctor ID or password.")
+      setLoading(false)
+      return
+    }
+
     router.push("/doctor")
-
     setLoading(false)
   }
 
