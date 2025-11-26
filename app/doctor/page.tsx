@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Users, Plus, Search, Calendar, Pill, FileText, ArrowLeft, Save, Send, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,42 +12,24 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import Link from "next/link"
 import { AuthGuard, useAuth } from "@/components/auth-guard"
 
-// Sample patient data
-const patientsData = [
-  {
-    id: 1,
-    name: "John Smith",
-    age: 65,
-    email: "john.smith@email.com",
-    phone: "(555) 123-4567",
-    lastVisit: "2024-01-10",
-    conditions: ["Hypertension", "Diabetes"],
-    activePrescriptions: 3,
-  },
-  {
-    id: 2,
-    name: "Mary Johnson",
-    age: 72,
-    email: "mary.johnson@email.com",
-    phone: "(555) 987-6543",
-    lastVisit: "2024-01-08",
-    conditions: ["Arthritis", "High Cholesterol"],
-    activePrescriptions: 2,
-  },
-  {
-    id: 3,
-    name: "Robert Davis",
-    age: 58,
-    email: "robert.davis@email.com",
-    phone: "(555) 456-7890",
-    lastVisit: "2024-01-12",
-    conditions: ["Heart Disease"],
-    activePrescriptions: 4,
-  },
-]
+// Patient type definition
+type Patient = {
+  id: string
+  externalId: string | null
+  name: string
+  email: string | null
+  phone: string | null
+  dateOfBirth: string | null
+  notes: string | null
+  lastVisit: string | null
+  activePrescriptions: number
+  createdAt: string
+}
 
 const medicationTypes = ["Tablet", "Capsule", "Liquid", "Injection", "Topical", "Inhaler"]
 
@@ -65,9 +47,22 @@ const frequencies = [
 export default function DoctorPortal() {
   const { authData, logout } = useAuth()
   const [activeTab, setActiveTab] = useState("patients")
-  const [selectedPatient, setSelectedPatient] = useState<number | null>(null)
+  const [selectedPatient, setSelectedPatient] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [patientsData, setPatientsData] = useState<Patient[]>([])
+  const [isLoadingPatients, setIsLoadingPatients] = useState(true)
+  const [isPatientDialogOpen, setIsPatientDialogOpen] = useState(false)
+  const [isCreatingPatient, setIsCreatingPatient] = useState(false)
+  const [patientFormError, setPatientFormError] = useState("")
+  const [patientForm, setPatientForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    dateOfBirth: "",
+    notes: "",
+    password: "",
+  })
   const [prescriptionForm, setPrescriptionForm] = useState({
     patientId: "",
     medicationName: "",
@@ -79,10 +74,95 @@ export default function DoctorPortal() {
     type: "",
   })
 
+  // Fetch patients from API
+  useEffect(() => {
+    const fetchPatients = async () => {
+      setIsLoadingPatients(true)
+      try {
+        const response = await fetch("/api/patients")
+        const data = await response.json()
+        if (data.success) {
+          setPatientsData(data.patients)
+        } else {
+          console.error("Failed to fetch patients:", data.message)
+        }
+      } catch (error) {
+        console.error("Error fetching patients:", error)
+      } finally {
+        setIsLoadingPatients(false)
+      }
+    }
+
+    fetchPatients()
+  }, [])
+
+  // Refresh patients list
+  const refreshPatients = async () => {
+    setIsLoadingPatients(true)
+    try {
+      const response = await fetch("/api/patients")
+      const data = await response.json()
+      if (data.success) {
+        setPatientsData(data.patients)
+      }
+    } catch (error) {
+      console.error("Error fetching patients:", error)
+    } finally {
+      setIsLoadingPatients(false)
+    }
+  }
+
+  const handleCreatePatient = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsCreatingPatient(true)
+    setPatientFormError("")
+
+    try {
+      const response = await fetch("/api/patients", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: patientForm.name,
+          email: patientForm.email || undefined,
+          phone: patientForm.phone || undefined,
+          dateOfBirth: patientForm.dateOfBirth || undefined,
+          notes: patientForm.notes || undefined,
+          password: patientForm.password || undefined,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Reset form
+        setPatientForm({
+          name: "",
+          email: "",
+          phone: "",
+          dateOfBirth: "",
+          notes: "",
+          password: "",
+        })
+        setIsPatientDialogOpen(false)
+        // Refresh patient list
+        await refreshPatients()
+      } else {
+        setPatientFormError(result.message || "Failed to create patient")
+      }
+    } catch (error) {
+      console.error("Error creating patient:", error)
+      setPatientFormError("Failed to create patient. Please try again.")
+    } finally {
+      setIsCreatingPatient(false)
+    }
+  }
+
   const filteredPatients = patientsData.filter(
     (patient) =>
       patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.email.toLowerCase().includes(searchTerm.toLowerCase()),
+      (patient.email && patient.email.toLowerCase().includes(searchTerm.toLowerCase())),
   )
 
   const handlePrescriptionSubmit = async (e: React.FormEvent) => {
@@ -90,10 +170,21 @@ export default function DoctorPortal() {
     setIsSubmitting(true)
 
     try {
+      const patientDetails = patientsData.find((patient) => patient.id === prescriptionForm.patientId)
+      if (!patientDetails) {
+        alert("Please select a patient before sending a prescription.")
+        setIsSubmitting(false)
+        return
+      }
+
       // Create prescription JSON
       const prescriptionJSON = {
-        patientId: prescriptionForm.patientId,
-        doctorId: authData?.userId || "unknown",
+        patient: {
+          id: patientDetails.externalId || patientDetails.id,
+          name: patientDetails.name,
+          email: patientDetails.email || undefined,
+          phone: patientDetails.phone || undefined,
+        },
         prescription: {
           medication: {
             name: prescriptionForm.medicationName,
@@ -200,10 +291,124 @@ export default function DoctorPortal() {
             <TabsContent value="patients" className="space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold">Patient Management</h2>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Patient
-                </Button>
+                <Dialog open={isPatientDialogOpen} onOpenChange={setIsPatientDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Patient
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Create New Patient</DialogTitle>
+                      <DialogDescription>
+                        Add a new patient to your practice. The patient will receive an ID for mobile app access.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleCreatePatient} className="space-y-4">
+                      {patientFormError && (
+                        <Alert variant="destructive">
+                          <AlertDescription>{patientFormError}</AlertDescription>
+                        </Alert>
+                      )}
+
+                      <div className="grid md:grid-cols-2 gap-4">
+                        {/* Patient Name */}
+                        <div className="space-y-2 md:col-span-2">
+                          <Label htmlFor="patient-name">
+                            Patient Name <span className="text-destructive">*</span>
+                          </Label>
+                          <Input
+                            id="patient-name"
+                            value={patientForm.name}
+                            onChange={(e) => setPatientForm((prev) => ({ ...prev, name: e.target.value }))}
+                            placeholder="Full name"
+                            required
+                          />
+                        </div>
+
+                        {/* Email */}
+                        <div className="space-y-2">
+                          <Label htmlFor="patient-email">Email</Label>
+                          <Input
+                            id="patient-email"
+                            type="email"
+                            value={patientForm.email}
+                            onChange={(e) => setPatientForm((prev) => ({ ...prev, email: e.target.value }))}
+                            placeholder="patient@example.com"
+                          />
+                        </div>
+
+                        {/* Phone */}
+                        <div className="space-y-2">
+                          <Label htmlFor="patient-phone">Phone</Label>
+                          <Input
+                            id="patient-phone"
+                            type="tel"
+                            value={patientForm.phone}
+                            onChange={(e) => setPatientForm((prev) => ({ ...prev, phone: e.target.value }))}
+                            placeholder="(555) 123-4567"
+                          />
+                        </div>
+
+                        {/* Date of Birth */}
+                        <div className="space-y-2">
+                          <Label htmlFor="patient-dob">Date of Birth</Label>
+                          <Input
+                            id="patient-dob"
+                            type="date"
+                            value={patientForm.dateOfBirth}
+                            onChange={(e) => setPatientForm((prev) => ({ ...prev, dateOfBirth: e.target.value }))}
+                          />
+                        </div>
+
+                        {/* Password */}
+                        <div className="space-y-2 md:col-span-2">
+                          <Label htmlFor="patient-password">
+                            Initial Password <span className="text-muted-foreground text-xs">(for mobile app login)</span>
+                          </Label>
+                          <Input
+                            id="patient-password"
+                            type="password"
+                            value={patientForm.password}
+                            onChange={(e) => setPatientForm((prev) => ({ ...prev, password: e.target.value }))}
+                            placeholder="Leave empty to set later"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Patient will use this password with their email to login to the mobile app
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Notes */}
+                      <div className="space-y-2">
+                        <Label htmlFor="patient-notes">Notes</Label>
+                        <Textarea
+                          id="patient-notes"
+                          value={patientForm.notes}
+                          onChange={(e) => setPatientForm((prev) => ({ ...prev, notes: e.target.value }))}
+                          placeholder="Medical history, allergies, or other relevant information"
+                          rows={3}
+                        />
+                      </div>
+
+                      {/* Submit Buttons */}
+                      <div className="flex gap-4 pt-4">
+                        <Button type="submit" className="flex-1" disabled={isCreatingPatient}>
+                          {isCreatingPatient ? "Creating..." : "Create Patient"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setIsPatientDialogOpen(false)}
+                          disabled={isCreatingPatient}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
               </div>
 
               {/* Search */}
@@ -218,8 +423,132 @@ export default function DoctorPortal() {
               </div>
 
               {/* Patient List */}
-              <div className="grid gap-4">
-                {filteredPatients.map((patient) => (
+              {isLoadingPatients ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Loading patients...</p>
+                </div>
+              ) : filteredPatients.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground mb-4">
+                    {searchTerm ? "No patients found matching your search." : "No patients yet. Create your first patient!"}
+                  </p>
+                  {!searchTerm && (
+                    <Dialog open={isPatientDialogOpen} onOpenChange={setIsPatientDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Patient
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle>Create New Patient</DialogTitle>
+                          <DialogDescription>
+                            Add a new patient to your practice. The patient will receive an ID for mobile app access.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleCreatePatient} className="space-y-4">
+                          {patientFormError && (
+                            <Alert variant="destructive">
+                              <AlertDescription>{patientFormError}</AlertDescription>
+                            </Alert>
+                          )}
+
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div className="space-y-2 md:col-span-2">
+                              <Label htmlFor="patient-name-empty">
+                                Patient Name <span className="text-destructive">*</span>
+                              </Label>
+                              <Input
+                                id="patient-name-empty"
+                                value={patientForm.name}
+                                onChange={(e) => setPatientForm((prev) => ({ ...prev, name: e.target.value }))}
+                                placeholder="Full name"
+                                required
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="patient-email-empty">Email</Label>
+                              <Input
+                                id="patient-email-empty"
+                                type="email"
+                                value={patientForm.email}
+                                onChange={(e) => setPatientForm((prev) => ({ ...prev, email: e.target.value }))}
+                                placeholder="patient@example.com"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="patient-phone-empty">Phone</Label>
+                              <Input
+                                id="patient-phone-empty"
+                                type="tel"
+                                value={patientForm.phone}
+                                onChange={(e) => setPatientForm((prev) => ({ ...prev, phone: e.target.value }))}
+                                placeholder="(555) 123-4567"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="patient-dob-empty">Date of Birth</Label>
+                              <Input
+                                id="patient-dob-empty"
+                                type="date"
+                                value={patientForm.dateOfBirth}
+                                onChange={(e) => setPatientForm((prev) => ({ ...prev, dateOfBirth: e.target.value }))}
+                              />
+                            </div>
+
+                            <div className="space-y-2 md:col-span-2">
+                              <Label htmlFor="patient-password-empty">
+                                Initial Password <span className="text-muted-foreground text-xs">(for mobile app login)</span>
+                              </Label>
+                              <Input
+                                id="patient-password-empty"
+                                type="password"
+                                value={patientForm.password}
+                                onChange={(e) => setPatientForm((prev) => ({ ...prev, password: e.target.value }))}
+                                placeholder="Leave empty to set later"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Patient will use this password with their email to login to the mobile app
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="patient-notes-empty">Notes</Label>
+                            <Textarea
+                              id="patient-notes-empty"
+                              value={patientForm.notes}
+                              onChange={(e) => setPatientForm((prev) => ({ ...prev, notes: e.target.value }))}
+                              placeholder="Medical history, allergies, or other relevant information"
+                              rows={3}
+                            />
+                          </div>
+
+                          <div className="flex gap-4 pt-4">
+                            <Button type="submit" className="flex-1" disabled={isCreatingPatient}>
+                              {isCreatingPatient ? "Creating..." : "Create Patient"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setIsPatientDialogOpen(false)}
+                              disabled={isCreatingPatient}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {filteredPatients.map((patient) => (
                   <Card key={patient.id} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-6">
                       <div className="flex items-center justify-between">
@@ -230,20 +559,20 @@ export default function DoctorPortal() {
                           <div>
                             <h3 className="font-semibold text-lg">{patient.name}</h3>
                             <p className="text-muted-foreground">
-                              Age: {patient.age} • {patient.email}
+                              {patient.email || "No email"}
                             </p>
-                            <p className="text-sm text-muted-foreground">{patient.phone}</p>
+                            {patient.phone && (
+                              <p className="text-sm text-muted-foreground">{patient.phone}</p>
+                            )}
+                            {patient.externalId && (
+                              <p className="text-xs text-muted-foreground">ID: {patient.externalId}</p>
+                            )}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="flex gap-2 mb-2">
-                            {patient.conditions.map((condition) => (
-                              <Badge key={condition} variant="outline">
-                                {condition}
-                              </Badge>
-                            ))}
-                          </div>
-                          <p className="text-sm text-muted-foreground">Last visit: {patient.lastVisit}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {patient.lastVisit ? `Last visit: ${patient.lastVisit}` : "No visits yet"}
+                          </p>
                           <p className="text-sm text-muted-foreground">
                             Active prescriptions: {patient.activePrescriptions}
                           </p>
@@ -255,7 +584,7 @@ export default function DoctorPortal() {
                           <Button
                             size="sm"
                             onClick={() => {
-                              setPrescriptionForm((prev) => ({ ...prev, patientId: patient.id.toString() }))
+                              setPrescriptionForm((prev) => ({ ...prev, patientId: patient.id }))
                               setActiveTab("prescriptions")
                             }}
                           >
@@ -265,8 +594,9 @@ export default function DoctorPortal() {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
             {/* Prescriptions Tab */}
@@ -303,8 +633,8 @@ export default function DoctorPortal() {
                           </SelectTrigger>
                           <SelectContent>
                             {patientsData.map((patient) => (
-                              <SelectItem key={patient.id} value={patient.id.toString()}>
-                                {patient.name} - {patient.email}
+                              <SelectItem key={patient.id} value={patient.id}>
+                                {patient.name} - {patient.email || "No email"}
                               </SelectItem>
                             ))}
                           </SelectContent>

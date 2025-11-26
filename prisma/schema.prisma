@@ -1,0 +1,75 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Doctor {
+  id             String          @id @default(cuid())
+  staffId        String          @unique
+  name           String
+  email          String?
+  passwordHash   String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  prescriptions  Prescription[]
+  patients       Patient[]       @relation("DoctorPatients")
+}
+
+model Patient {
+  id             String          @id @default(cuid())
+  externalId     String?         @unique
+  doctor         Doctor          @relation("DoctorPatients", fields: [doctorId], references: [id])
+  doctorId       String
+  name           String
+  email          String?         @unique
+  phone          String?
+  passwordHash   String?         // Hashed password for patient login
+  dateOfBirth    DateTime?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  prescriptions  Prescription[]
+}
+
+model Prescription {
+  id             String              @id @default(cuid())
+  doctor         Doctor              @relation(fields: [doctorId], references: [id])
+  doctorId       String
+  patient        Patient             @relation(fields: [patientId], references: [id])
+  patientId      String
+  medicationName String
+  dosage         String
+  frequency      String
+  duration       String
+  type           String?
+  startDate      DateTime
+  instructions   String?
+  status         PrescriptionStatus  @default(ACTIVE)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  scheduleEntries MedicationSchedule[]
+}
+
+model MedicationSchedule {
+  id              String        @id @default(cuid())
+  prescription    Prescription  @relation(fields: [prescriptionId], references: [id])
+  prescriptionId  String
+  scheduledAt     DateTime
+  taken           Boolean       @default(false)
+  takenAt         DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+enum PrescriptionStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}

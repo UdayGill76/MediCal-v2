@@ -1,33 +1,112 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { auth } from "@/auth"
+import { prisma } from "@/lib/prisma"
+import { generateScheduleDateTimes } from "@/lib/schedule"
+import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
 
-// In a real app, this would be stored in a database
-// For demo purposes, we'll use a simple in-memory store
-const prescriptionsStore: any[] = []
+type PrescriptionRequest = {
+  patient: {
+    id: string
+    name?: string
+    email?: string
+    phone?: string
+  }
+  prescription: {
+    medication: {
+      name: string
+      dosage: string
+      type?: string
+    }
+    schedule: {
+      frequency: string
+      startDate: string
+      duration: string
+    }
+    instructions?: string
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const prescriptionData = await request.json()
-
-    // Add timestamp and unique ID
-    const prescription = {
-      ...prescriptionData,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-      status: "active",
+    const session = await auth()
+    if (!session?.user) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
     }
 
-    // Store prescription (in real app, save to database)
-    prescriptionsStore.push(prescription)
+    const payload = (await request.json()) as PrescriptionRequest
+    if (!payload?.patient?.id) {
+      return NextResponse.json({ success: false, message: "Patient information missing" }, { status: 400 })
+    }
 
-    // In a real app, you would also:
-    // 1. Send notification to patient
-    // 2. Generate calendar entries
-    // 3. Set up medication reminders
+    const doctor = await prisma.doctor.upsert({
+      where: { staffId: session.user.id },
+      update: {
+        name: session.user.name ?? session.user.id,
+        updatedAt: new Date(),
+      },
+      create: {
+        staffId: session.user.id,
+        name: session.user.name ?? session.user.id,
+        email: session.user.email ?? undefined,
+      },
+    })
+
+    const patient = await prisma.patient.upsert({
+      where: { externalId: payload.patient.id },
+      update: {
+        name: payload.patient.name ?? payload.patient.id,
+        email: payload.patient.email,
+        phone: payload.patient.phone,
+        doctorId: doctor.id,
+      },
+      create: {
+        externalId: payload.patient.id,
+        name: payload.patient.name ?? payload.patient.id,
+        email: payload.patient.email,
+        phone: payload.patient.phone,
+        doctorId: doctor.id,
+      },
+    })
+
+    const startDate = new Date(payload.prescription.schedule.startDate)
+    if (Number.isNaN(startDate.getTime())) {
+      return NextResponse.json({ success: false, message: "Invalid start date" }, { status: 400 })
+    }
+
+    const prescription = await prisma.prescription.create({
+      data: {
+        doctorId: doctor.id,
+        patientId: patient.id,
+        medicationName: payload.prescription.medication.name,
+        dosage: payload.prescription.medication.dosage,
+        type: payload.prescription.medication.type ?? "tablet",
+        frequency: payload.prescription.schedule.frequency,
+        duration: payload.prescription.schedule.duration,
+        startDate,
+        instructions: payload.prescription.instructions,
+      },
+    })
+
+    const scheduleDateTimes = generateScheduleDateTimes({
+      startDate: payload.prescription.schedule.startDate,
+      duration: payload.prescription.schedule.duration,
+      frequency: payload.prescription.schedule.frequency,
+    })
+
+    if (scheduleDateTimes.length > 0) {
+      await prisma.medicationSchedule.createMany({
+        data: scheduleDateTimes.map((scheduledAt) => ({
+          prescriptionId: prescription.id,
+          scheduledAt,
+        })),
+      })
+    }
 
     return NextResponse.json({
       success: true,
       message: "Prescription created successfully",
       prescriptionId: prescription.id,
+      scheduleCount: scheduleDateTimes.length,
     })
   } catch (error) {
     console.error("Error creating prescription:", error)
@@ -38,18 +117,45 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const patientId = searchParams.get("patientId")
+    const patientExternalId = searchParams.get("patientId")
 
-    if (!patientId) {
+    if (!patientExternalId) {
       return NextResponse.json({ success: false, message: "Patient ID is required" }, { status: 400 })
     }
 
-    // Filter prescriptions for specific patient
-    const patientPrescriptions = prescriptionsStore.filter((prescription) => prescription.patientId === patientId)
+    const patient = await prisma.patient.findUnique({
+      where: { externalId: patientExternalId },
+      include: {
+        prescriptions: {
+          include: {
+            scheduleEntries: true,
+            doctor: true,
+          },
+        },
+      },
+    })
+
+    if (!patient) {
+      return NextResponse.json({ success: true, prescriptions: [] })
+    }
 
     return NextResponse.json({
       success: true,
-      prescriptions: patientPrescriptions,
+      prescriptions: patient.prescriptions.map((prescription) => ({
+        id: prescription.id,
+        medicationName: prescription.medicationName,
+        dosage: prescription.dosage,
+        type: prescription.type,
+        frequency: prescription.frequency,
+        duration: prescription.duration,
+        startDate: prescription.startDate,
+        instructions: prescription.instructions,
+        doctor: {
+          id: prescription.doctor.staffId,
+          name: prescription.doctor.name,
+        },
+        scheduleEntries: prescription.scheduleEntries,
+      })),
     })
   } catch (error) {
     console.error("Error fetching prescriptions:", error)
