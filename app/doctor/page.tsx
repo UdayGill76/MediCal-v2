@@ -55,6 +55,10 @@ export default function DoctorPortal() {
   const [isPatientDialogOpen, setIsPatientDialogOpen] = useState(false)
   const [isCreatingPatient, setIsCreatingPatient] = useState(false)
   const [patientFormError, setPatientFormError] = useState("")
+  const [selectedPatientDetails, setSelectedPatientDetails] = useState<Patient | null>(null)
+  const [isPatientDetailsOpen, setIsPatientDetailsOpen] = useState(false)
+  const [patientPrescriptions, setPatientPrescriptions] = useState<any[]>([])
+  const [isLoadingPrescriptions, setIsLoadingPrescriptions] = useState(false)
   const [patientForm, setPatientForm] = useState({
     name: "",
     email: "",
@@ -73,6 +77,24 @@ export default function DoctorPortal() {
     startDate: "",
     type: "",
   })
+
+  // Fetch prescriptions for selected patient
+  const fetchPatientPrescriptions = async (patientExternalId: string | null) => {
+    if (!patientExternalId) return
+
+    setIsLoadingPrescriptions(true)
+    try {
+      const response = await fetch(`/api/prescriptions?patientId=${patientExternalId}`)
+      const data = await response.json()
+      if (data.success) {
+        setPatientPrescriptions(data.prescriptions || [])
+      }
+    } catch (error) {
+      console.error("Error fetching prescriptions:", error)
+    } finally {
+      setIsLoadingPrescriptions(false)
+    }
+  }
 
   // Fetch patients from API
   useEffect(() => {
@@ -260,7 +282,7 @@ export default function DoctorPortal() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="secondary">{authData?.userId}</Badge>
+                <Badge variant="secondary">{authData?.name || authData?.userId}</Badge>
                 <Button variant="outline" size="sm" onClick={logout}>
                   <LogOut className="h-4 w-4 mr-2" />
                   Logout
@@ -272,7 +294,7 @@ export default function DoctorPortal() {
 
         <div className="container mx-auto px-4 py-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="patients" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
                 Patients
@@ -280,10 +302,6 @@ export default function DoctorPortal() {
               <TabsTrigger value="prescriptions" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
                 New Prescription
-              </TabsTrigger>
-              <TabsTrigger value="calendar" className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Schedule
               </TabsTrigger>
             </TabsList>
 
@@ -549,51 +567,59 @@ export default function DoctorPortal() {
               ) : (
                 <div className="grid gap-4">
                   {filteredPatients.map((patient) => (
-                  <Card key={patient.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                            <Users className="h-6 w-6 text-primary" />
+                    <Card key={patient.id} className="hover:shadow-md transition-shadow">
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                              <Users className="h-6 w-6 text-primary" />
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-lg">{patient.name}</h3>
+                              <p className="text-muted-foreground">
+                                {patient.email || "No email"}
+                              </p>
+                              {patient.phone && (
+                                <p className="text-sm text-muted-foreground">{patient.phone}</p>
+                              )}
+                              {patient.externalId && (
+                                <p className="text-xs text-muted-foreground">ID: {patient.externalId}</p>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="font-semibold text-lg">{patient.name}</h3>
-                            <p className="text-muted-foreground">
-                              {patient.email || "No email"}
+                          <div className="text-right">
+                            <p className="text-sm text-muted-foreground">
+                              {patient.lastVisit ? `Last visit: ${patient.lastVisit}` : "No visits yet"}
                             </p>
-                            {patient.phone && (
-                              <p className="text-sm text-muted-foreground">{patient.phone}</p>
-                            )}
-                            {patient.externalId && (
-                              <p className="text-xs text-muted-foreground">ID: {patient.externalId}</p>
-                            )}
+                            <p className="text-sm text-muted-foreground">
+                              Active prescriptions: {patient.activePrescriptions}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedPatientDetails(patient)
+                                setIsPatientDetailsOpen(true)
+                                fetchPatientPrescriptions(patient.externalId)
+                              }}
+                            >
+                              View Details
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setPrescriptionForm((prev) => ({ ...prev, patientId: patient.id }))
+                                setActiveTab("prescriptions")
+                              }}
+                            >
+                              New Prescription
+                            </Button>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm text-muted-foreground">
-                            {patient.lastVisit ? `Last visit: ${patient.lastVisit}` : "No visits yet"}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Active prescriptions: {patient.activePrescriptions}
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm">
-                            View Details
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setPrescriptionForm((prev) => ({ ...prev, patientId: patient.id }))
-                              setActiveTab("prescriptions")
-                            }}
-                          >
-                            New Prescription
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
                   ))}
                 </div>
               )}
@@ -758,25 +784,142 @@ export default function DoctorPortal() {
               </Card>
             </TabsContent>
 
-            {/* Calendar Tab */}
-            <TabsContent value="calendar" className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold mb-2">Appointment Schedule</h2>
-                <p className="text-muted-foreground">View and manage your patient appointments and follow-ups.</p>
-              </div>
 
-              <Card>
-                <CardContent className="p-8 text-center">
-                  <Calendar className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">Schedule Management</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Calendar integration for appointment scheduling will be available in the next update.
-                  </p>
-                  <Button variant="outline">View Full Calendar</Button>
-                </CardContent>
-              </Card>
-            </TabsContent>
           </Tabs>
+
+          {/* Patient Details Dialog */}
+          <Dialog open={isPatientDetailsOpen} onOpenChange={setIsPatientDetailsOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Patient Details</DialogTitle>
+                <DialogDescription>
+                  Complete information for {selectedPatientDetails?.name}
+                </DialogDescription>
+              </DialogHeader>
+              {selectedPatientDetails && (
+                <div className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-muted-foreground">Name</Label>
+                      <p className="font-medium">{selectedPatientDetails.name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Patient ID</Label>
+                      <p className="font-medium">{selectedPatientDetails.externalId || "N/A"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Email</Label>
+                      <p className="font-medium">{selectedPatientDetails.email || "Not provided"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Phone</Label>
+                      <p className="font-medium">{selectedPatientDetails.phone || "Not provided"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Date of Birth</Label>
+                      <p className="font-medium">{selectedPatientDetails.dateOfBirth || "Not provided"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Active Prescriptions</Label>
+                      <p className="font-medium">{selectedPatientDetails.activePrescriptions}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Last Visit</Label>
+                      <p className="font-medium">{selectedPatientDetails.lastVisit || "No visits yet"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Registered On</Label>
+                      <p className="font-medium">{selectedPatientDetails.createdAt}</p>
+                    </div>
+                  </div>
+                  {selectedPatientDetails.notes && (
+                    <div>
+                      <Label className="text-muted-foreground">Notes</Label>
+                      <Card className="mt-2">
+                        <CardContent className="p-4">
+                          <p className="text-sm whitespace-pre-wrap">{selectedPatientDetails.notes}</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+
+                  {/* Active Prescriptions Section */}
+                  <div>
+                    <Label className="text-muted-foreground">Active Prescriptions ({patientPrescriptions.length})</Label>
+                    {isLoadingPrescriptions ? (
+                      <Card className="mt-2">
+                        <CardContent className="p-4 text-center text-muted-foreground">
+                          Loading prescriptions...
+                        </CardContent>
+                      </Card>
+                    ) : patientPrescriptions.length > 0 ? (
+                      <div className="mt-2 space-y-2">
+                        {patientPrescriptions.map((prescription: any) => (
+                          <Card key={prescription.id}>
+                            <CardContent className="p-4">
+                              <div className="flex items-start justify-between">
+                                <div className="space-y-1 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-semibold">{prescription.medicationName}</h4>
+                                    <Badge variant="outline" className="text-xs">{prescription.type}</Badge>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 text-sm">
+                                    <div>
+                                      <span className="text-muted-foreground">Dosage:</span> {prescription.dosage}
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Frequency:</span> {prescription.frequency}
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Duration:</span> {prescription.duration}
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Start Date:</span> {new Date(prescription.startDate).toLocaleDateString()}
+                                    </div>
+                                  </div>
+                                  {prescription.instructions && (
+                                    <p className="text-sm text-muted-foreground italic mt-2">
+                                      {prescription.instructions}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      <Card className="mt-2">
+                        <CardContent className="p-4 text-center text-muted-foreground">
+                          No active prescriptions
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 pt-4">
+                    <Button
+                      onClick={() => {
+                        setPrescriptionForm((prev) => ({ ...prev, patientId: selectedPatientDetails.id }))
+                        setActiveTab("prescriptions")
+                        setIsPatientDetailsOpen(false)
+                      }}
+                      className="flex-1"
+                    >
+                      Create Prescription
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsPatientDetailsOpen(false)}
+                      className="flex-1"
+                    >
+                      Close
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </AuthGuard>
