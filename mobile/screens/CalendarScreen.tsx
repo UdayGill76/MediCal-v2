@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions } from "react-native"
 import { useAuth } from "../hooks/useAuth"
-import { Calendar, DateData } from "react-native-calendars"
 import { useFocusEffect } from "@react-navigation/native"
+
+const SCREEN_WIDTH = Dimensions.get('window').width
+const ITEM_WIDTH = SCREEN_WIDTH * 0.6 // Center item takes 60% of screen
+const SIDE_ITEM_WIDTH = SCREEN_WIDTH * 0.2 // Side items take 20% each
 
 // Define types for our data
 type CalendarEntry = {
@@ -21,15 +24,24 @@ type CalendarResponse = {
   [date: string]: CalendarEntry[]
 }
 
+type DayData = {
+  date: string
+  dayNumber: number
+  dayName: string
+  monthName: string
+  isToday: boolean
+}
+
 export default function CalendarScreen() {
   const { patient, logout } = useAuth()
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
   const [calendarData, setCalendarData] = useState<CalendarResponse>({})
   const [isLoading, setIsLoading] = useState(false)
-  const [markedDates, setMarkedDates] = useState<any>({})
+  const [days, setDays] = useState<DayData[]>([])
+  const scrollViewRef = useRef<ScrollView>(null)
 
   // API Base URL - Updated to match your local network
-  const API_BASE_URL = "http://172.16.131.10:3000"
+  const API_BASE_URL = "http://172.16.133.69:3000"
 
   const fetchCalendarData = async () => {
     if (!patient?.externalId) return
@@ -41,7 +53,6 @@ export default function CalendarScreen() {
 
       if (data.success) {
         setCalendarData(data.calendar)
-        processCalendarMarks(data.calendar)
       }
     } catch (error) {
       console.error("Error fetching calendar:", error)
@@ -56,72 +67,51 @@ export default function CalendarScreen() {
     }, [patient?.externalId])
   )
 
-  const processCalendarMarks = (data: CalendarResponse) => {
-    const marks: any = {}
+  // Generate days for carousel (60 days: 30 before, today, 29 after)
+  useEffect(() => {
+    const generateDays = () => {
+      const today = new Date()
+      const daysArray: DayData[] = []
 
-    Object.keys(data).forEach(date => {
-      const entries = data[date]
+      for (let i = -30; i <= 29; i++) {
+        const date = new Date(today)
+        date.setDate(date.getDate() + i)
 
-      // Create dots for each medication (max 3 visible)
-      const dots = entries.slice(0, 3).map((entry, index) => {
-        let color = "#3b82f6" // blue for pills
+        const dateString = date.toISOString().split("T")[0]
+        const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-        // Color based on medication type
-        if (entry.type === "tablet" || entry.type === "pill") color = "#3b82f6" // blue
-        else if (entry.type === "capsule") color = "#8b5cf6" // purple
-        else if (entry.type === "liquid") color = "#06b6d4" // cyan
-        else if (entry.type === "injection") color = "#ef4444" // red
-        else if (entry.type === "topical") color = "#10b981" // green
-
-        // If taken, make it lighter/muted
-        if (entry.taken) {
-          color = "#94a3b8" // gray for taken
-        }
-
-        return { color }
-      })
-
-      marks[date] = {
-        dots: dots,
-        marked: true,
+        daysArray.push({
+          date: dateString,
+          dayNumber: date.getDate(),
+          dayName: dayNames[date.getDay()],
+          monthName: monthNames[date.getMonth()],
+          isToday: i === 0
+        })
       }
-    })
 
-    // Add selected date styling
-    const current = marks[selectedDate] || {}
-    marks[selectedDate] = {
-      ...current,
-      selected: true,
-      selectedColor: "#059669",
-      selectedTextColor: "#ffffff"
+      setDays(daysArray)
     }
 
-    setMarkedDates(marks)
-  }
+    generateDays()
+  }, [])
 
-  const onDayPress = (day: DateData) => {
-    setSelectedDate(day.dateString)
-
-    // Update selection style
-    const marks = { ...markedDates }
-
-    // Remove old selection
-    Object.keys(marks).forEach(key => {
-      if (marks[key].selected) {
-        const { selected, selectedColor, ...rest } = marks[key]
-        marks[key] = rest
-        if (Object.keys(marks[key]).length === 0) delete marks[key]
-      }
-    })
-
-    // Add new selection
-    marks[day.dateString] = {
-      ...(marks[day.dateString] || {}),
-      selected: true,
-      selectedColor: "#059669"
+  // Auto-scroll to today on mount
+  useEffect(() => {
+    if (days.length > 0 && scrollViewRef.current) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ x: 30 * SCREEN_WIDTH, animated: false })
+      }, 100)
     }
+  }, [days])
 
-    setMarkedDates(marks)
+  const handleScroll = (event: any) => {
+    const offsetX = event.nativeEvent.contentOffset.x
+    const index = Math.round(offsetX / SCREEN_WIDTH)
+
+    if (days[index] && days[index].date !== selectedDate) {
+      setSelectedDate(days[index].date)
+    }
   }
 
   const selectedMedications = calendarData[selectedDate] || []
@@ -135,42 +125,96 @@ export default function CalendarScreen() {
         </TouchableOpacity>
       </View>
 
-      <Calendar
-        onDayPress={onDayPress}
-        markedDates={markedDates}
-        theme={{
-          todayTextColor: "#059669",
-          arrowColor: "#059669",
-          dotColor: "#059669",
-          selectedDayBackgroundColor: "#059669",
-        }}
-      />
+      {/* Carousel Date Picker */}
+      <View style={styles.carouselContainer}>
+        <ScrollView
+          ref={scrollViewRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={handleScroll}
+          decelerationRate="fast"
+          snapToInterval={SCREEN_WIDTH}
+          contentContainerStyle={styles.carouselContent}
+        >
+          {days.map((day, index) => {
+            const isSelected = day.date === selectedDate
+            const medications = calendarData[day.date] || []
 
+            return (
+              <View key={day.date} style={styles.carouselItem}>
+                <View style={[styles.dateCard, isSelected && styles.dateCardSelected]}>
+                  <Text style={[styles.monthText, isSelected && styles.monthTextSelected]}>
+                    {day.monthName}
+                  </Text>
+                  <Text style={[styles.dateNumber, isSelected && styles.dateNumberSelected]}>
+                    {day.dayNumber}
+                  </Text>
+                  <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>
+                    {day.dayName}
+                  </Text>
+
+                  {/* Medication indicators */}
+                  {medications.length > 0 && (
+                    <View style={styles.medicationIndicators}>
+                      {medications.slice(0, 4).map((med, idx) => {
+                        let color = "#3b82f6"
+                        if (med.type === "capsule") color = "#8b5cf6"
+                        else if (med.type === "liquid") color = "#06b6d4"
+                        else if (med.type === "injection") color = "#ef4444"
+                        else if (med.type === "topical") color = "#10b981"
+                        if (med.taken) color = "#94a3b8"
+
+                        return (
+                          <View
+                            key={idx}
+                            style={[
+                              styles.medLine,
+                              { backgroundColor: color },
+                              isSelected && styles.medLineSelected
+                            ]}
+                          />
+                        )
+                      })}
+                    </View>
+                  )}
+                </View>
+              </View>
+            )
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Medication List for Selected Day */}
       <View style={styles.scheduleContainer}>
-        <Text style={styles.dateTitle}>
-          Schedule for {selectedDate}
+        <Text style={styles.scheduleTitle}>
+          Today's Schedule
         </Text>
 
         {isLoading ? (
           <ActivityIndicator color="#059669" style={{ marginTop: 20 }} />
         ) : (
-          <ScrollView style={styles.medicationList}>
+          <ScrollView style={styles.medicationList} showsVerticalScrollIndicator={false}>
             {selectedMedications.length === 0 ? (
-              <Text style={styles.emptyText}>No medications scheduled for this day.</Text>
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No medications scheduled</Text>
+              </View>
             ) : (
               selectedMedications.map((med) => (
                 <View key={med.id} style={styles.medicationCard}>
                   <View style={styles.medHeader}>
-                    <Text style={styles.medName}>{med.name}</Text>
+                    <View style={styles.medInfo}>
+                      <Text style={styles.medName}>{med.name}</Text>
+                      <Text style={styles.medDosage}>{med.dosage}</Text>
+                    </View>
                     <Text style={styles.medTime}>{med.time}</Text>
                   </View>
-                  <Text style={styles.medDosage}>{med.dosage} • {med.type}</Text>
                   {med.instructions && (
                     <Text style={styles.medInstructions}>{med.instructions}</Text>
                   )}
                   <View style={[styles.statusBadge, med.taken ? styles.takenBadge : styles.pendingBadge]}>
                     <Text style={[styles.statusText, med.taken ? styles.takenText : styles.pendingText]}>
-                      {med.taken ? "Taken" : "Pending"}
+                      {med.taken ? "✓ Taken" : "Pending"}
                     </Text>
                   </View>
                 </View>
@@ -211,68 +255,156 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  carouselContainer: {
+    height: 200,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  carouselContent: {
+    alignItems: "center",
+  },
+  carouselItem: {
+    width: SCREEN_WIDTH,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  dateCard: {
+    width: 140,
+    height: 160,
+    backgroundColor: "#f1f5f9",
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+  },
+  dateCardSelected: {
+    width: 180,
+    height: 180,
+    backgroundColor: "#059669",
+    borderColor: "#059669",
+    shadowColor: "#059669",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  monthText: {
+    fontSize: 14,
+    color: "#64748b",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  monthTextSelected: {
+    color: "#dcfce7",
+    fontSize: 16,
+  },
+  dateNumber: {
+    fontSize: 48,
+    fontWeight: "bold",
+    color: "#0f172a",
+    marginVertical: 4,
+  },
+  dateNumberSelected: {
+    fontSize: 64,
+    color: "#fff",
+  },
+  dayText: {
+    fontSize: 14,
+    color: "#64748b",
+    fontWeight: "500",
+  },
+  dayTextSelected: {
+    fontSize: 16,
+    color: "#dcfce7",
+    fontWeight: "600",
+  },
+  medicationIndicators: {
+    flexDirection: "row",
+    gap: 4,
+    marginTop: 12,
+  },
+  medLine: {
+    width: 20,
+    height: 3,
+    borderRadius: 2,
+  },
+  medLineSelected: {
+    width: 24,
+    height: 4,
+  },
   scheduleContainer: {
     flex: 1,
     padding: 20,
   },
-  dateTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#334155",
+  scheduleTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#0f172a",
     marginBottom: 16,
   },
   medicationList: {
     flex: 1,
   },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+  },
   emptyText: {
     color: "#94a3b8",
-    textAlign: "center",
-    marginTop: 20,
+    fontSize: 16,
     fontStyle: "italic",
   },
   medicationCard: {
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   medHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
+    alignItems: "flex-start",
+    marginBottom: 8,
+  },
+  medInfo: {
+    flex: 1,
   },
   medName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "bold",
     color: "#0f172a",
-  },
-  medTime: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#64748b",
+    marginBottom: 4,
   },
   medDosage: {
     fontSize: 14,
-    color: "#475569",
-    marginBottom: 8,
+    color: "#64748b",
+  },
+  medTime: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#059669",
   },
   medInstructions: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#64748b",
     fontStyle: "italic",
     marginBottom: 12,
   },
   statusBadge: {
     alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   takenBadge: {
     backgroundColor: "#dcfce7",
@@ -281,7 +413,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fee2e2",
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
   },
   takenText: {

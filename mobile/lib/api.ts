@@ -7,7 +7,7 @@ import { Platform } from "react-native"
 // For iOS Simulator: use localhost
 // For Physical Device: use your computer's IP address (e.g., 192.168.1.100)
 const API_BASE_URL = __DEV__
-  ? "http://172.16.131.10:3000"  // Physical device - use your computer's local IP
+  ? "http://172.16.133.69:3000"  // Physical device - use your computer's local IP
   : "https://your-production-url.com" // Update for production
 
 // Create axios instance

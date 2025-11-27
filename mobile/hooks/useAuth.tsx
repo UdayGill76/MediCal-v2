@@ -5,7 +5,7 @@ import { Platform } from "react-native"
 
 // API Base URL - using specific local IP for Expo Go
 const API_BASE_URL = __DEV__
-  ? "http://172.16.131.10:3000" // Your WiFi IP address
+  ? "http://172.16.133.69:3000" // Your WiFi IP address
   : "https://your-production-url.com"
 
 type Patient = {
