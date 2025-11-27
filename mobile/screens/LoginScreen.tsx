@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Image,
 } from "react-native"
 import { useAuth } from "../hooks/useAuth"
 
@@ -36,6 +37,13 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
+        <View style={styles.logoContainer}>
+          <Image
+            source={require("../assets/medical-logo.jpg")}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
         <Text style={styles.title}>MediCal</Text>
         <Text style={styles.subtitle}>Patient Login</Text>
 
@@ -98,6 +106,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+  },
+  logoContainer: {
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  logo: {
+    width: 80,
+    height: 80,
   },
   title: {
     fontSize: 32,
