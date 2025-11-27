@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions } from "react-native"
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, Modal } from "react-native"
+import { Calendar } from "react-native-calendars"
 import { useAuth } from "../hooks/useAuth"
 import { useFocusEffect } from "@react-navigation/native"
 
@@ -38,6 +39,7 @@ export default function CalendarScreen() {
   const [calendarData, setCalendarData] = useState<CalendarResponse>({})
   const [isLoading, setIsLoading] = useState(false)
   const [days, setDays] = useState<DayData[]>([])
+  const [showMonthlyView, setShowMonthlyView] = useState(false)
   const scrollViewRef = useRef<ScrollView>(null)
 
   // API Base URL - Updated to match your local network
@@ -114,15 +116,58 @@ export default function CalendarScreen() {
     }
   }
 
+  // Process calendar data for monthly view
+  const processCalendarMarks = () => {
+    const marks: any = {}
+
+    Object.keys(calendarData).forEach((date) => {
+      const medications = calendarData[date]
+      if (medications.length > 0) {
+        const dots = medications.slice(0, 3).map((med) => {
+          let color = "#3b82f6"
+          if (med.type === "capsule") color = "#8b5cf6"
+          else if (med.type === "liquid") color = "#06b6d4"
+          else if (med.type === "injection") color = "#ef4444"
+          else if (med.type === "topical") color = "#10b981"
+          if (med.taken) color = "#94a3b8"
+
+          return { key: med.id, color }
+        })
+
+        marks[date] = {
+          dots,
+          selected: date === selectedDate,
+          selectedColor: date === selectedDate ? "#059669" : undefined,
+        }
+      }
+    })
+
+    // Mark today
+    const today = new Date().toISOString().split("T")[0]
+    if (!marks[today]) {
+      marks[today] = { marked: true, dotColor: "#059669" }
+    }
+
+    return marks
+  }
+
   const selectedMedications = calendarData[selectedDate] || []
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>My Medications</Text>
-        <TouchableOpacity onPress={logout} style={styles.logoutButton}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            onPress={() => setShowMonthlyView(true)}
+            style={styles.monthViewButton}
+          >
+            <Text style={styles.monthViewText}>📅 Month</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={logout} style={styles.logoutButton}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Carousel Date Picker */}
@@ -223,6 +268,92 @@ export default function CalendarScreen() {
           </ScrollView>
         )}
       </View>
+
+      {/* Monthly Calendar Modal */}
+      <Modal
+        visible={showMonthlyView}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowMonthlyView(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Monthly Overview</Text>
+            <TouchableOpacity onPress={() => setShowMonthlyView(false)}>
+              <Text style={styles.closeButton}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            <Calendar
+              current={selectedDate}
+              markingType="multi-dot"
+              markedDates={processCalendarMarks()}
+              onDayPress={(day) => {
+                setSelectedDate(day.dateString)
+                setShowMonthlyView(false)
+              }}
+              theme={{
+                todayTextColor: "#059669",
+                selectedDayBackgroundColor: "#059669",
+                selectedDayTextColor: "#ffffff",
+                arrowColor: "#059669",
+                monthTextColor: "#0f172a",
+                textMonthFontWeight: "bold",
+                textMonthFontSize: 18,
+              }}
+            />
+
+            <View style={styles.legendContainer}>
+              <Text style={styles.legendTitle}>Medication Types</Text>
+              <View style={styles.legendGrid}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: "#3b82f6" }]} />
+                  <Text style={styles.legendText}>Tablet/Pill</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]} />
+                  <Text style={styles.legendText}>Capsule</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: "#06b6d4" }]} />
+                  <Text style={styles.legendText}>Liquid</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: "#ef4444" }]} />
+                  <Text style={styles.legendText}>Injection</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: "#10b981" }]} />
+                  <Text style={styles.legendText}>Topical</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: "#94a3b8" }]} />
+                  <Text style={styles.legendText}>Taken</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Show medications for selected date in modal */}
+            {selectedMedications.length > 0 && (
+              <View style={styles.modalMedicationList}>
+                <Text style={styles.modalMedicationTitle}>
+                  Medications for {new Date(selectedDate).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric'
+                  })}
+                </Text>
+                {selectedMedications.map((med) => (
+                  <View key={med.id} style={styles.modalMedicationCard}>
+                    <Text style={styles.modalMedName}>{med.name}</Text>
+                    <Text style={styles.modalMedDetails}>{med.dosage} • {med.time}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -246,6 +377,23 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     color: "#0f172a",
+  },
+  headerButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  monthViewButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "transparent",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#059669",
+  },
+  monthViewText: {
+    color: "#059669",
+    fontSize: 13,
+    fontWeight: "600",
   },
   logoutButton: {
     padding: 8,
@@ -421,5 +569,90 @@ const styles = StyleSheet.create({
   },
   pendingText: {
     color: "#991b1b",
+  },
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    paddingTop: 60,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#0f172a",
+  },
+  closeButton: {
+    fontSize: 28,
+    color: "#64748b",
+    fontWeight: "300",
+  },
+  modalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  legendContainer: {
+    marginTop: 24,
+    padding: 16,
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+  },
+  legendTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#0f172a",
+    marginBottom: 12,
+  },
+  legendGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    width: "45%",
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  legendText: {
+    fontSize: 13,
+    color: "#64748b",
+  },
+  modalMedicationList: {
+    marginTop: 24,
+  },
+  modalMedicationTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#0f172a",
+    marginBottom: 12,
+  },
+  modalMedicationCard: {
+    backgroundColor: "#f8fafc",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  modalMedName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#0f172a",
+    marginBottom: 4,
+  },
+  modalMedDetails: {
+    fontSize: 13,
+    color: "#64748b",
   },
 })
