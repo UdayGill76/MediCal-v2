@@ -55,6 +55,7 @@ export async function DELETE(
         }
 
         const { id } = await params
+        console.log(`Attempting to delete doctor with ID: ${id}`)
 
         // Check if doctor has patients
         const doctor = await prisma.doctor.findUnique({

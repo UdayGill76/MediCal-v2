@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Users, UserPlus, Stethoscope, Search, LogOut, Loader2 } from "lucide-react"
 import { toast } from "sonner"
@@ -518,23 +519,29 @@ export default function AdminDashboard() {
                 </Dialog>
 
                 {/* Delete Confirmation Dialog */}
-                <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Confirm Deletion</DialogTitle>
-                            <DialogDescription>
-                                Are you sure you want to delete <strong>{deletingItem?.name}</strong>?
-                                This action cannot be undone.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="flex justify-end gap-2 mt-4">
-                            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
-                            <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>
+                <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete the account for <strong>{deletingItem?.name}</strong> and remove their data from our servers.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={(e) => {
+                                    e.preventDefault()
+                                    handleDelete()
+                                }}
+                                disabled={isSubmitting}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
                                 {isSubmitting ? "Deleting..." : "Delete"}
-                            </Button>
-                        </div>
-                    </DialogContent>
-                </Dialog>
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
 
                 {/* Patient Details Dialog */}
                 <Dialog open={isPatientDetailsOpen} onOpenChange={setIsPatientDetailsOpen}>

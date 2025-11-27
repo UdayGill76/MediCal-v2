@@ -53,15 +53,29 @@ export async function DELETE(
         }
 
         const { id } = await params
+        console.log(`Attempting to delete patient with ID: ${id}`)
 
-        // Delete related records first (cascade manually if needed, or rely on Prisma cascade)
-        // Prisma schema doesn't explicitly show cascade, so we'll let Prisma handle it or error
-        // Ideally we should delete prescriptions first
+        // 1. Find all prescriptions for this patient to get their IDs
+        const prescriptions = await prisma.prescription.findMany({
+            where: { patientId: id },
+            select: { id: true }
+        })
 
+        const prescriptionIds = prescriptions.map(p => p.id)
+
+        // 2. Delete all schedule entries for these prescriptions
+        if (prescriptionIds.length > 0) {
+            await prisma.medicationSchedule.deleteMany({
+                where: { prescriptionId: { in: prescriptionIds } }
+            })
+        }
+
+        // 3. Delete prescriptions
         await prisma.prescription.deleteMany({
             where: { patientId: id }
         })
 
+        // 4. Delete patient
         await prisma.patient.delete({
             where: { id },
         })
