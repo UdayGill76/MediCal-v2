@@ -72,7 +72,8 @@ export default function DoctorPortal() {
     medicationName: "",
     dosage: "",
     frequency: "",
-    duration: "",
+    durationValue: "",
+    durationUnit: "days",
     instructions: "",
     startDate: "",
     type: "",
@@ -216,7 +217,7 @@ export default function DoctorPortal() {
           schedule: {
             frequency: prescriptionForm.frequency,
             startDate: prescriptionForm.startDate,
-            duration: prescriptionForm.duration,
+            duration: `${prescriptionForm.durationValue} ${prescriptionForm.durationUnit}`,
           },
           instructions: prescriptionForm.instructions,
         },
@@ -239,7 +240,8 @@ export default function DoctorPortal() {
           medicationName: "",
           dosage: "",
           frequency: "",
-          duration: "",
+          durationValue: "",
+          durationUnit: "days",
           instructions: "",
           startDate: "",
           type: "",
@@ -734,13 +736,31 @@ export default function DoctorPortal() {
                       {/* Duration */}
                       <div className="space-y-2">
                         <Label htmlFor="duration">Duration</Label>
-                        <Input
-                          id="duration"
-                          value={prescriptionForm.duration}
-                          onChange={(e) => setPrescriptionForm((prev) => ({ ...prev, duration: e.target.value }))}
-                          placeholder="e.g., 30 days, 2 weeks"
-                          required
-                        />
+                        <div className="flex gap-2">
+                          <Input
+                            id="duration"
+                            type="number"
+                            min="1"
+                            value={prescriptionForm.durationValue}
+                            onChange={(e) => setPrescriptionForm((prev) => ({ ...prev, durationValue: e.target.value }))}
+                            placeholder="e.g., 5"
+                            required
+                            className="flex-1"
+                          />
+                          <Select
+                            value={prescriptionForm.durationUnit}
+                            onValueChange={(value) => setPrescriptionForm((prev) => ({ ...prev, durationUnit: value }))}
+                          >
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue placeholder="Unit" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="days">Days</SelectItem>
+                              <SelectItem value="weeks">Weeks</SelectItem>
+                              <SelectItem value="months">Months</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
 
                       {/* Start Date */}
