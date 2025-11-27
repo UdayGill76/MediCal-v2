@@ -63,6 +63,41 @@ export default function CalendarScreen() {
     }
   }
 
+  const handleToggleTaken = async (scheduleId: string, taken: boolean) => {
+    // Optimistic update
+    const updatedCalendar = { ...calendarData }
+    Object.keys(updatedCalendar).forEach(date => {
+      updatedCalendar[date] = updatedCalendar[date].map(med => {
+        if (med.id === scheduleId) {
+          return { ...med, taken }
+        }
+        return med
+      })
+    })
+    setCalendarData(updatedCalendar)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/prescriptions/schedule/${scheduleId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ taken }),
+      })
+
+      const data = await response.json()
+      if (!data.success) {
+        // Revert on failure
+        fetchCalendarData()
+        alert("Failed to update status")
+      }
+    } catch (error) {
+      console.error("Error updating status:", error)
+      fetchCalendarData() // Revert
+      alert("Error updating status")
+    }
+  }
+
   useFocusEffect(
     useCallback(() => {
       fetchCalendarData()
@@ -257,10 +292,21 @@ export default function CalendarScreen() {
                   {med.instructions && (
                     <Text style={styles.medInstructions}>{med.instructions}</Text>
                   )}
-                  <View style={[styles.statusBadge, med.taken ? styles.takenBadge : styles.pendingBadge]}>
-                    <Text style={[styles.statusText, med.taken ? styles.takenText : styles.pendingText]}>
-                      {med.taken ? "✓ Taken" : "Pending"}
-                    </Text>
+                  <View style={styles.cardFooter}>
+                    <View style={[styles.statusBadge, med.taken ? styles.takenBadge : styles.pendingBadge]}>
+                      <Text style={[styles.statusText, med.taken ? styles.takenText : styles.pendingText]}>
+                        {med.taken ? "✓ Taken" : "Pending"}
+                      </Text>
+                    </View>
+
+                    {!med.taken && (
+                      <TouchableOpacity
+                        style={styles.markTakenButton}
+                        onPress={() => handleToggleTaken(med.id, true)}
+                      >
+                        <Text style={styles.markTakenText}>Mark as Taken</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               ))
@@ -654,5 +700,22 @@ const styles = StyleSheet.create({
   modalMedDetails: {
     fontSize: 13,
     color: "#64748b",
+  },
+  cardFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  markTakenButton: {
+    backgroundColor: "#059669",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  markTakenText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
   },
 })

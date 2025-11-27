@@ -20,7 +20,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  const isDoctorId = (id: string) => id.startsWith("DOC-")
+  const isDoctorId = (id: string) => id.startsWith("DOC-") || id === "ADMIN"
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,10 +28,10 @@ export default function LoginPage() {
     setError("")
 
     const idUpper = userId.toUpperCase()
-    const isDoctor = isDoctorId(idUpper)
+    const isValidId = isDoctorId(idUpper)
 
-    if (!isDoctor) {
-      setError("Doctor access only. Use a valid Doctor ID like DOC-2024-001.")
+    if (!isValidId) {
+      setError("Invalid ID format. Use a valid Doctor ID (DOC-...) or Admin ID.")
       setLoading(false)
       return
     }
@@ -49,12 +49,16 @@ export default function LoginPage() {
     })
 
     if (result?.error) {
-      setError("Invalid Doctor ID or password.")
+      setError("Invalid ID or password.")
       setLoading(false)
       return
     }
 
-    router.push("/doctor")
+    if (idUpper === "ADMIN") {
+      router.push("/admin")
+    } else {
+      router.push("/doctor")
+    }
     setLoading(false)
   }
 
@@ -109,13 +113,20 @@ export default function LoginPage() {
                 {userId && (
                   <div className="flex items-center justify-center mt-2">
                     <div
-                      className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                        isDoc ? "bg-teal-100 text-teal-700" : "bg-red-100 text-red-700"
-                      }`}
+                      className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${userId.toUpperCase() === "ADMIN"
+                          ? "bg-purple-100 text-purple-700"
+                          : isDoc
+                            ? "bg-teal-100 text-teal-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
                     >
                       <>
                         <Stethoscope className="w-3 h-3 mr-1" />
-                        {isDoc ? "Doctor ID detected" : "Doctor ID required"}
+                        {userId.toUpperCase() === "ADMIN"
+                          ? "Admin ID detected"
+                          : isDoc
+                            ? "Doctor ID detected"
+                            : "Doctor ID required"}
                       </>
                     </div>
                   </div>

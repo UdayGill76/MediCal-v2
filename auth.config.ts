@@ -1,5 +1,7 @@
 import type { NextAuthConfig } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
+import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
 
 type DoctorAccount = {
   id: string
@@ -56,46 +58,75 @@ export const authConfig: NextAuthConfig = {
       id: "credentials",
       name: "Credentials",
       credentials: {
-        id: { label: "Doctor ID", type: "text" },
+        id: { label: "User ID", type: "text" },
         password: { label: "Password", type: "password" },
       },
       authorize: async (credentials) => {
-        const doctorId = credentials.id?.toString().trim().toUpperCase()
+        const userId = credentials.id?.toString().trim()
         const password = credentials.password?.toString()
 
-        if (!doctorId || !password) {
+        if (!userId || !password) {
           return null
         }
 
-        const doctor = doctorAccounts.find(
-          (account) => account.id.toUpperCase() === doctorId && account.password === password,
+        // 1. Check for Admin
+        if (userId === "ADMIN" && password === "admin123") {
+          return {
+            id: "ADMIN",
+            name: "Administrator",
+            role: "admin",
+          } as any
+        }
+
+        // 2. Check Database for Doctor
+        try {
+          const doctor = await prisma.doctor.findUnique({
+            where: { staffId: userId.toUpperCase() },
+          })
+
+          if (doctor && doctor.passwordHash) {
+            const isValid = await bcrypt.compare(password, doctor.passwordHash)
+            if (isValid) {
+              return {
+                id: doctor.staffId,
+                name: doctor.name,
+                role: "doctor",
+              } as any
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching doctor from DB:", error)
+        }
+
+        // 3. Fallback to hardcoded/env doctors (Legacy support)
+        const legacyDoctor = doctorAccounts.find(
+          (account) => account.id.toUpperCase() === userId.toUpperCase() && account.password === password,
         )
 
-        if (!doctor) {
-          return null
+        if (legacyDoctor) {
+          return {
+            id: legacyDoctor.id,
+            name: legacyDoctor.name ?? legacyDoctor.id,
+            role: "doctor",
+          } as any
         }
 
-        return {
-          id: doctor.id,
-          name: doctor.name ?? doctor.id,
-          role: "doctor" as const,
-        }
+        return null
       },
     }),
   ],
   callbacks: {
     jwt: async ({ token, user }) => {
       if (user) {
-        const role = ((user as { role?: "doctor" | "patient" }).role ?? "doctor") as "doctor" | "patient"
-        token.role = role
+        token.role = user.role
         token.userId = user.id
       }
       return token
     },
     session: async ({ session, token }) => {
       if (session.user) {
-        session.user.id = (token.userId as string) ?? session.user.id
-        session.user.role = (token.role as "doctor" | "patient") ?? "doctor"
+        session.user.id = (token.userId as string) || session.user.id
+        session.user.role = (token.role as any) || "doctor"
       }
       return session
     },
