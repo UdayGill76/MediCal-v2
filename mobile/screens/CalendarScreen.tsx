@@ -162,7 +162,7 @@ export default function CalendarScreen() {
             onPress={() => setShowMonthlyView(true)}
             style={styles.monthViewButton}
           >
-            <Text style={styles.monthViewText}>📅 Month</Text>
+            <Text style={styles.monthViewText}>📅</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={logout} style={styles.logoutButton}>
             <Text style={styles.logoutText}>Logout</Text>
