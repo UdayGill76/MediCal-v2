@@ -2,13 +2,10 @@ import axios from "axios"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { Platform } from "react-native"
 
-// API Base URL - Update this to your Next.js backend URL
-// For Android Emulator: use 10.0.2.2 (special IP that maps to host's localhost)
-// For iOS Simulator: use localhost
-// For Physical Device: use your computer's IP address (e.g., 192.168.1.100)
-const API_BASE_URL = __DEV__
-  ? "http://172.16.133.69:3000"  // Physical device - use your computer's local IP
-  : "https://your-production-url.com" // Update for production
+import { API_CONFIG } from "./config"
+
+// API Base URL
+const API_BASE_URL = API_CONFIG.BASE_URL
 
 // Create axios instance
 const api = axios.create({

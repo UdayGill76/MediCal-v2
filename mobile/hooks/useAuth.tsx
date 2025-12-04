@@ -1,12 +1,10 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
-import { STORAGE_KEYS } from "../lib/config"
+import { STORAGE_KEYS, API_CONFIG } from "../lib/config"
 import { Platform } from "react-native"
 
-// API Base URL - using specific local IP for Expo Go
-const API_BASE_URL = __DEV__
-  ? "http://172.16.133.69:3000" // Your WiFi IP address
-  : "https://your-production-url.com"
+// API Base URL
+const API_BASE_URL = API_CONFIG.BASE_URL
 
 type Patient = {
   id: string

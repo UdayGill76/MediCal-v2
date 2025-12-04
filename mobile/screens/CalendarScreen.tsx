@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { Calendar } from "react-native-calendars"
 import { useAuth } from "../hooks/useAuth"
 import { useFocusEffect } from "@react-navigation/native"
+import { API_CONFIG } from "../lib/config"
 
 const SCREEN_WIDTH = Dimensions.get('window').width
 const ITEM_WIDTH = SCREEN_WIDTH * 0.6 // Center item takes 60% of screen
@@ -42,8 +43,8 @@ export default function CalendarScreen() {
   const [showMonthlyView, setShowMonthlyView] = useState(false)
   const scrollViewRef = useRef<ScrollView>(null)
 
-  // API Base URL - Updated to match your local network
-  const API_BASE_URL = "http://172.16.133.69:3000"
+  // API Base URL
+  const API_BASE_URL = API_CONFIG.BASE_URL
 
   const fetchCalendarData = async () => {
     if (!patient?.externalId) return
